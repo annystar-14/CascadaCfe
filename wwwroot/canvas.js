@@ -76,15 +76,19 @@ function animarAgua() {
         const c = cortinas[i];
         const datosRef = datosPresas[nombrePresa];
 
-        if (datosRef && datosRef.nivelActual !== null) {
-            const porcentaje = parseFloat(datosRef.nivelActual);
+        if (datosRef) {
+            // --- Animación del agua: usa solo el porcentaje ---
+            const porcentaje = parseFloat(datosRef.porcentaje) || 0;
             const nivelMapeado = (porcentaje / 100) * c.height;
             e.nivel = Math.max(0, Math.min(nivelMapeado, c.height));
 
-            nivelesActuales[nombrePresa].nivel = parseFloat(datosRef.nivelActual).toFixed(2);
-            nivelesActuales[nombrePresa].porcentaje = porcentaje.toFixed(1);
-            nivelesActuales[nombrePresa].hora = datosRef.hora;
+            // --- Datos para etiquetas ---
+            nivelesActuales[nombrePresa].nivel = (datosRef.nivel !== null && datosRef.nivel !== undefined)
+                ? parseFloat(datosRef.nivel).toFixed(2)
+                : 'N/D';
 
+            nivelesActuales[nombrePresa].porcentaje = porcentaje.toFixed(1);
+            nivelesActuales[nombrePresa].hora = datosRef.hora || 'N/A';
         } else {
             e.nivel = 0;
             nivelesActuales[nombrePresa].nivel = 'N/D';
@@ -93,6 +97,7 @@ function animarAgua() {
         }
     });
 }
+
 
 // --- Dibujo de cortinas ---
 function drawCortina(ctx, c) {
@@ -242,9 +247,11 @@ function drawDataOverlay(ctx) {
 
     const presasNombres = ['angostura', 'chicoasen', 'malpaso', 'juanDeGrijalva', 'penitas'];
 
+    // --- Encabezado general ---
     ctx.fillStyle = '#4bc119ff';
     ctx.font = 'bold 16px Arial';
     ctx.fillText(`Hora: ${nivelesActuales.angostura.hora}`, 10, 20);
+
     ctx.font = '14px Arial';
     ctx.fillText(`Nivel Dinámico (m.s.n.m / %)`, 10, 40);
 
@@ -254,19 +261,34 @@ function drawDataOverlay(ctx) {
         const datos = nivelesActuales[key];
         const coord = labelCoords[i];
 
+        // --- Nombre de la presa ---
         ctx.fillStyle = '#0a2333';
         ctx.font = 'bold 13px Arial';
         ctx.fillText(coord.name, coord.x, coord.y);
 
+        // --- Nivel m.s.n.m. ---
         ctx.fillStyle = '#1e1d1dff';
         ctx.font = '12px Arial';
-        ctx.fillText(`Nivel: ${datos.nivel} m.s.n.m.`, coord.x, coord.y + 15);
+        if (datos.nivel !== null && datos.nivel !== 'N/D') {
+            ctx.fillText(`Nivel: ${datos.nivel} m.s.n.m.`, coord.x, coord.y + 15);
+        } else {
+            ctx.fillText(`Nivel: N/D`, coord.x, coord.y + 15);
+        }
 
-        ctx.fillStyle = (datos.porcentaje > 80) ? 'black' : (datos.porcentaje < 50 ? 'red' : 'black');
+        // --- Porcentaje ---
+        let colorPct = 'black';
+        if (datos.porcentaje !== 'N/D') {
+            const pctNum = parseFloat(datos.porcentaje);
+            if (pctNum < 50) colorPct = 'red';
+            else if (pctNum > 80) colorPct = 'black';
+        }
+        ctx.fillStyle = colorPct;
         ctx.font = 'bold 14px Arial';
         ctx.fillText(`${datos.porcentaje}%`, coord.x, coord.y + 30);
     });
 }
+
+
 
 function drawScene() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);

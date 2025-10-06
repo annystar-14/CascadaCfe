@@ -27,10 +27,10 @@ public class ServicioExcel
     private const int COL_HORA = 2; // B: Hora
 
     // NIVELES m.s.n.m. (COLUMNA DE ELEVACIÓN)
-    private const int COL_PEA_NIVEL_MSNM = 3;   // C: Peñitas
-    private const int COL_ANG_NIVEL_MSNM = 14;  // N: Angostura
-    private const int COL_MMT_NIVEL_MSNM = 26;  // Z: Chicoasén (MMT)
-    private const int COL_MAL_NIVEL_MSNM = 38;  // AL: Malpaso
+    private const int COL_PEA_NIVEL_MSNM = 6;   // C: Peñitas
+    private const int COL_ANG_NIVEL_MSNM = 2;  // N: Angostura
+    private const int COL_MMT_NIVEL_MSNM = 3;  // Z: Chicoasén (MMT)
+    private const int COL_MAL_NIVEL_MSNM = 5;  // AL: Malpaso
     private const int COL_JGRIJ_NIVEL_MSNM = 50; // AX: Juan de Grijalva
 
     // PORCENTAJES DE LLENADO ÚTIL AL NAMO % 
@@ -48,33 +48,31 @@ public class ServicioExcel
 
         using (var package = new ExcelPackage(new FileInfo(_rutaArchivoExcel)))
         {
-            var worksheet = package.Workbook.Worksheets.FirstOrDefault(ws => ws.Name.Equals(NOMBRE_HOJA, StringComparison.OrdinalIgnoreCase));
-            if (worksheet == null)
-            {
-                var hojas = string.Join(", ", package.Workbook.Worksheets.Select(w => w.Name));
-                throw new Exception($"No se encontró la hoja 'Niveles'. Hojas disponibles: {hojas}");
-            }
+            // --- Hoja de porcentajes ---
+            var hojaPorcentaje = package.Workbook.Worksheets.FirstOrDefault(ws => ws.Name.Equals("Niveles", StringComparison.OrdinalIgnoreCase));
+            if (hojaPorcentaje == null) throw new Exception("No se encontró la hoja 'Niveles'.");
 
-            // Columnas de porcentaje que quieres usar
+            // --- Hoja de niveles m.s.n.m ---
+            var hojaNivel = package.Workbook.Worksheets.FirstOrDefault(ws => ws.Name.Equals("ElevSHG", StringComparison.OrdinalIgnoreCase));
+            if (hojaNivel == null) throw new Exception("No se encontró la hoja 'ElevSHG'.");
+
+            // --- Última fila con datos de porcentaje ---
             int[] columnasPorcentaje = { 12, 24, 35, 46, 47 }; // L, X, AI, AT, AU
+            int ultimaFilaPct = hojaPorcentaje.Dimension.End.Row;
+            while (ultimaFilaPct >= 1 && !columnasPorcentaje.Any(c => !string.IsNullOrWhiteSpace(hojaPorcentaje.Cells[ultimaFilaPct, c].Text)))
+                ultimaFilaPct--;
 
-            // Encontrar la última fila que tenga datos en alguna de esas columnas
-            int ultimaFila = worksheet.Dimension.End.Row;
-            while (ultimaFila >= 1)
+            // --- Última fila con datos de nivel ---
+            int[] columnasNivel = { 2, 3, 5, 6 }; // B, C, E, F
+            int ultimaFilaNivel = hojaNivel.Dimension.End.Row;
+            while (ultimaFilaNivel >= 1 && !columnasNivel.Any(c => !string.IsNullOrWhiteSpace(hojaNivel.Cells[ultimaFilaNivel, c].Text)))
+                ultimaFilaNivel--;
+
+            string hora = hojaPorcentaje.Cells[ultimaFilaPct, 2].Text?.Trim() ?? "N/A"; // hora tomada de hoja porcentaje
+
+            Func<ExcelWorksheet, int, int, double> leerDouble = (hoja, fila, col) =>
             {
-                bool hayDatos = columnasPorcentaje.Any(col => !string.IsNullOrWhiteSpace(worksheet.Cells[ultimaFila, col].Text));
-                if (hayDatos) break;
-                ultimaFila--;
-            }
-
-            if (ultimaFila < 5)
-                throw new Exception("No se encontraron datos en las columnas de porcentaje.");
-
-            string hora = worksheet.Cells[ultimaFila, COL_HORA].Text?.Trim() ?? "N/A";
-
-            Func<int, double> leerDouble = (col) =>
-            {
-                string texto = worksheet.Cells[ultimaFila, col].Text?.Trim();
+                string texto = hoja.Cells[fila, col].Text?.Trim();
                 if (string.IsNullOrEmpty(texto)) return 0.0;
                 if (double.TryParse(texto, out double val)) return val;
                 texto = texto.Replace(',', '.');
@@ -83,26 +81,34 @@ public class ServicioExcel
                 return 0.0;
             };
 
-            // Leer porcentajes exactos de las columnas que mencionaste
-            double peaPct = leerDouble(12);  // Peñitas L
-            double angPct = leerDouble(24);  // Angostura X
-            double mmtPct = leerDouble(35);  // Manuel Moreno Torres AI
-            double malPct = leerDouble(46);  // Malpaso AT
-            double jGrijPct = leerDouble(47); // Juan de Grijalva AU
+            // --- Leer porcentajes ---
+            double peaPct = leerDouble(hojaPorcentaje, ultimaFilaPct, 12);  // Peñitas
+            double angPct = leerDouble(hojaPorcentaje, ultimaFilaPct, 24);  // Angostura
+            double mmtPct = leerDouble(hojaPorcentaje, ultimaFilaPct, 35);  // Chicoasén
+            double malPct = leerDouble(hojaPorcentaje, ultimaFilaPct, 46);  // Malpaso
+            double jGrijPct = leerDouble(hojaPorcentaje, ultimaFilaPct, 47); // Juan de Grijalva
+
+            // --- Leer niveles m.s.n.m ---
+            double peaNivel = leerDouble(hojaNivel, ultimaFilaNivel, 6);   // B: Peñitas
+            double angNivel = leerDouble(hojaNivel, ultimaFilaNivel, 2);   // B: Angostura (Columna B)
+            double mmtNivel = leerDouble(hojaNivel, ultimaFilaNivel, 3);   // C: Chicoasén
+            double malNivel = leerDouble(hojaNivel, ultimaFilaNivel, 5);   // E: Malpaso
+           
 
             return new
             {
                 presas = new
                 {
-                    penitas = new { nivelActual = peaPct, min = 0.0, max = 100.0, hora },
-                    angostura = new { nivelActual = angPct, min = 0.0, max = 100.0, hora },
-                    chicoasen = new { nivelActual = mmtPct, min = 0.0, max = 100.0, hora },
-                    malpaso = new { nivelActual = malPct, min = 0.0, max = 100.0, hora },
-                    juanDeGrijalva = new { nivelActual = jGrijPct, min = 0.0, max = 100.0, hora }
+                    penitas = new { nivel = peaNivel, porcentaje = peaPct, hora },
+                    angostura = new { nivel = angNivel, porcentaje = angPct, hora },
+                    chicoasen = new { nivel = mmtNivel, porcentaje = mmtPct, hora },
+                    malpaso = new { nivel = malNivel, porcentaje = malPct, hora },
+                    juanDeGrijalva = new { nivel = (double?)null, porcentaje = jGrijPct, hora }
                 }
             };
         }
     }
+
 
 
 
