@@ -2,59 +2,49 @@
 using System;
 using System.IO;
 using System.Linq;
-
-// NOTA: Asegúrate de tener instalado el paquete NuGet 'EPPlus' en tu proyecto.
-//       ExcelPackage.LicenseContext = LicenseContext.NonCommercial; debe establecerse una vez 
-//       al inicio de la aplicación (por ejemplo, en Program.cs o Startup.cs) si usas la versión gratuita de EPPlus.
-
 public class ServicioExcel
 {
-    private readonly string _rutaArchivoExcel;
+    private readonly string _carpetaExcel;
 
-    private const string NOMBRE_HOJA = "Niveles";
+    private const string Patron_Archivo = "FIN*.xlsx";
 
     // Constructor: La ruta al archivo Excel debe inyectarse o definirse aquí.
-    public ServicioExcel(string rutaArchivoExcel)
+
+
+    public ServicioExcel(string carpetaExcel)
     {
-        _rutaArchivoExcel = rutaArchivoExcel;
+        _carpetaExcel = carpetaExcel;
     }
 
-    // Definición de las columnas de la hoja "Niveles" (EPPlus usa índice base 1)
-    // ============== DEFINICIONES DE COLUMNAS CORRECTAS (AJUSTADAS) ==============
+    private string ObtenerUltimoArchivoExcel() 
+    {
+        var dir = new DirectoryInfo(_carpetaExcel);
+        var archivoReciente = dir.GetFiles(Patron_Archivo)
+                                 .OrderByDescending(f => f.LastWriteTime)
+                                 .FirstOrDefault();
 
-    // ============== DEFINICIONES DE COLUMNAS CORRECTAS (ÚLTIMO AJUSTE) ==============
-
-    private const int COL_HORA = 2; // B: Hora
-
-    // NIVELES m.s.n.m. (COLUMNA DE ELEVACIÓN)
-    private const int COL_PEA_NIVEL_MSNM = 6;   // C: Peñitas
-    private const int COL_ANG_NIVEL_MSNM = 2;  // N: Angostura
-    private const int COL_MMT_NIVEL_MSNM = 3;  // Z: Chicoasén (MMT)
-    private const int COL_MAL_NIVEL_MSNM = 5;  // AL: Malpaso
-    private const int COL_JGRIJ_NIVEL_MSNM = 50; // AX: Juan de Grijalva
-
-    // PORCENTAJES DE LLENADO ÚTIL AL NAMO % 
-    private const int COL_PEA_PORCENTAJE = 12; // L: Peñitas
-    private const int COL_ANG_PORCENTAJE = 25; // Y: Angostura
-    private const int COL_MMT_PORCENTAJE = 37; // AK: Chicoasén (MMT)
-    private const int COL_MAL_PORCENTAJE = 49; // AW: Malpaso
-    private const int COL_JGRIJ_PORCENTAJE = 61; // BI: Juan de Grijalva
-    // ============================================================================
+        if (archivoReciente == null)
+            throw new FileNotFoundException($"No se encontró ningún Excel en: {_carpetaExcel}");
+        return archivoReciente.FullName;
+    }
 
     public object LeerDatos()
     {
-        if (!File.Exists(_rutaArchivoExcel))
-            throw new FileNotFoundException($"No se encontró el archivo en: {_rutaArchivoExcel}");
+        string rutaArchivo = ObtenerUltimoArchivoExcel();
+        var infoArchivo = new FileInfo(rutaArchivo);
+        string ultimaActualizacionArchivo = infoArchivo.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss");
 
-        using (var package = new ExcelPackage(new FileInfo(_rutaArchivoExcel)))
-        {
+        using (var package = new ExcelPackage(new FileInfo(rutaArchivo)))
+        {                   
             // --- Hoja de porcentajes ---
             var hojaPorcentaje = package.Workbook.Worksheets.FirstOrDefault(ws => ws.Name.Equals("Niveles", StringComparison.OrdinalIgnoreCase));
             if (hojaPorcentaje == null) throw new Exception("No se encontró la hoja 'Niveles'.");
-
+                       
             // --- Hoja de niveles m.s.n.m ---
-            var hojaNivel = package.Workbook.Worksheets.FirstOrDefault(ws => ws.Name.Equals("ElevSHG", StringComparison.OrdinalIgnoreCase));
-            if (hojaNivel == null) throw new Exception("No se encontró la hoja 'ElevSHG'.");
+            var hojaNivel = package.Workbook.Worksheets
+                .FirstOrDefault(ws => ws.Name.Equals("Niveles", StringComparison.OrdinalIgnoreCase));
+            if (hojaNivel == null) throw new Exception("No se encontró la hoja 'Niveles'.");
+                                                                                            
 
             // --- Última fila con datos de porcentaje ---
             int[] columnasPorcentaje = { 12, 24, 35, 46, 47 }; // L, X, AI, AT, AU
@@ -63,7 +53,7 @@ public class ServicioExcel
                 ultimaFilaPct--;
 
             // --- Última fila con datos de nivel ---
-            int[] columnasNivel = { 2, 3, 5, 6 }; // B, C, E, F
+            int[] columnasNivel = { 4, 14, 25, 36 }; // B, C, E, F
             int ultimaFilaNivel = hojaNivel.Dimension.End.Row;
             while (ultimaFilaNivel >= 1 && !columnasNivel.Any(c => !string.IsNullOrWhiteSpace(hojaNivel.Cells[ultimaFilaNivel, c].Text)))
                 ultimaFilaNivel--;
@@ -89,14 +79,15 @@ public class ServicioExcel
             double jGrijPct = leerDouble(hojaPorcentaje, ultimaFilaPct, 47); // Juan de Grijalva
 
             // --- Leer niveles m.s.n.m ---
-            double peaNivel = leerDouble(hojaNivel, ultimaFilaNivel, 6);   // B: Peñitas
-            double angNivel = leerDouble(hojaNivel, ultimaFilaNivel, 2);   // B: Angostura (Columna B)
-            double mmtNivel = leerDouble(hojaNivel, ultimaFilaNivel, 3);   // C: Chicoasén
-            double malNivel = leerDouble(hojaNivel, ultimaFilaNivel, 5);   // E: Malpaso
+            double peaNivel = leerDouble(hojaNivel, ultimaFilaNivel, 3);   // B: Peñitas
+            double angNivel = leerDouble(hojaNivel, ultimaFilaNivel, 14);   // B: Angostura (Columna B)
+            double mmtNivel = leerDouble(hojaNivel, ultimaFilaNivel, 25);   // C: Chicoasén
+            double malNivel = leerDouble(hojaNivel, ultimaFilaNivel, 36);   // E: Malpaso
            
 
             return new
             {
+                ultimaActualizacionArchivo,
                 presas = new
                 {
                     penitas = new { nivel = peaNivel, porcentaje = peaPct, hora },
@@ -108,8 +99,4 @@ public class ServicioExcel
             };
         }
     }
-
-
-
-
 }

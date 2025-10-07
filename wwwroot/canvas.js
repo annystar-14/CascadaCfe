@@ -28,6 +28,9 @@ const golfo = { x: 875, y: 390, width: 82, height: 20 };
 
 let t = 0;
 let datosPresas = null;
+let horaExcel = 'N/D';
+let ultimaActualizacion = 'N/D';
+
 
 // Niveles actuales
 let nivelesActuales = {
@@ -56,6 +59,10 @@ async function fetchAndAnimate() {
         console.log("datos recibidos", data);
 
         datosPresas = data.presas;
+
+        horaExcel = data.presas?.angostura?.hora || 'N/D';
+        ultimaActualizacion = data.ultimaActualizacionArchivo || 'N/D';
+
 
         if (fondo.complete) {
             loop();
@@ -245,15 +252,20 @@ function cubicBezier(t, p0, p1, p2, p3) {
 function drawDataOverlay(ctx) {
     if (!datosPresas) return;
 
+        // --- NUEVO: cuadro con hora del Excel y fecha de actualización ---
+
+    ctx.fillStyle = "green";
+    ctx.font = "bold 14px Arial";
+    ctx.fillText(`Hora Reflejada: ${horaExcel}`, 20, 25);
+    ctx.fillText(`dia: ${ultimaActualizacion}`, 20, 45);
+
+    ctx.fillStyle = '#1e1d1dff';
+    ctx.font = 'bold 12px Arial';
+    ctx.fillText(`Golfo de Mexico`, 890, 370);
+
     const presasNombres = ['angostura', 'chicoasen', 'malpaso', 'juanDeGrijalva', 'penitas'];
 
-    // --- Encabezado general ---
-    ctx.fillStyle = '#4bc119ff';
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText(`Hora: ${nivelesActuales.angostura.hora}`, 10, 20);
 
-    ctx.font = '14px Arial';
-    ctx.fillText(`Nivel Dinámico (m.s.n.m / %)`, 10, 40);
 
     presasNombres.forEach((key, i) => {
         if (i >= labelCoords.length) return;
